@@ -43,17 +43,18 @@ async def neuro_chat(request: ChatRequest):
     # We use Flash for lower latency in a real-time demo
     try:
         response = client.models.generate_content(
-            model='gemini-1.5-flash',
+            model='gemini-2.5-flash',
             contents=request.user_message,
             config=types.GenerateContentConfig(
                 system_instruction=behavior_instruction,
-                max_output_tokens=150,
-                temperature=0.7
+                temperature=0.7,
+                # ADDED: Optional thinking budget for 2026 models to prevent truncation
+                # thinking_config=types.ThinkingConfig(include_thoughts=True) 
             )
         )
         ai_text = response.text
     except Exception as e:
-        ai_text = f"Error calling Gemini: {str(e)}"
+        ai_text = f"Error: {str(e)}"
 
     return {
         "workload_detected": workload,
