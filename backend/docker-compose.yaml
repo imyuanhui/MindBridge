@@ -26,3 +26,12 @@ services:
       - cache
       - brain-engine
     restart: always
+
+  # Service 4: EEG Simulator
+  simulator:
+    build: ./simulator
+    ports:
+      - "8001:8001"
+    depends_on:
+      - cache
+    restart: always
