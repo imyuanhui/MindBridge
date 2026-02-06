@@ -2,6 +2,7 @@ import asyncio
 import json
 import numpy as np
 import redis
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -32,7 +33,8 @@ generation_task = None
 active_connections: List[WebSocket] = []
 
 # Redis connection for microservice communication
-r = redis.Redis(host='cache', port=6379, decode_responses=True)
+# Will be initialized in lifespan
+r = None
 
 
 class EEGSimulator:
@@ -120,7 +122,15 @@ class EEGSimulator:
             for band_name, (low, high) in FREQ_BANDS.items():
                 # Find indices for frequency band
                 band_mask = (freqs >= low) & (freqs <= high)
-                band_power = np.trapz(psd[band_mask], freqs[band_mask])
+                # Calculate power using trapezoidal integration
+                # Manual implementation for compatibility
+                if len(psd[band_mask]) > 1:
+                    # Trapezoidal rule: sum of (y1 + y2) / 2 * (x2 - x1)
+                    band_power = np.sum((psd[band_mask][1:] + psd[band_mask][:-1]) / 2.0 * np.diff(freqs[band_mask]))
+                elif len(psd[band_mask]) == 1:
+                    band_power = psd[band_mask][0] * (high - low)
+                else:
+                    band_power = 0.0
                 features.append(float(band_power))
         
         return features
@@ -129,10 +139,35 @@ class EEGSimulator:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Handle startup and shutdown events"""
-    global simulator, generation_task
+    global simulator, generation_task, r
     
     # Startup
     print("Starting EEG Simulator...")
+    
+    # Initialize Redis connection
+    redis_host = os.getenv('REDIS_HOST', 'cache')
+    redis_port = int(os.getenv('REDIS_PORT', '6379'))
+    print(f"Connecting to Redis at {redis_host}:{redis_port}...")
+    
+    max_retries = 5
+    retry_delay = 2
+    for attempt in range(max_retries):
+        try:
+            r = redis.Redis(host=redis_host, port=redis_port, decode_responses=True, socket_connect_timeout=5)
+            r.ping()  # Test connection
+            print(f"✓ Redis connection successful")
+            break
+        except (redis.ConnectionError, redis.TimeoutError) as e:
+            if attempt < max_retries - 1:
+                print(f"⚠ Redis connection failed (attempt {attempt + 1}/{max_retries}): {e}")
+                print(f"  Retrying in {retry_delay} seconds...")
+                await asyncio.sleep(retry_delay)
+            else:
+                print(f"✗ Failed to connect to Redis after {max_retries} attempts")
+                print(f"  Error: {e}")
+                print(f"  Make sure Redis is running at {redis_host}:{redis_port}")
+                r = None
+    
     simulator = EEGSimulator(SAMPLE_RATE, NUM_CHANNELS)
     print(f"Sample Rate: {SAMPLE_RATE} Hz")
     print(f"Channels: {NUM_CHANNELS}")
@@ -193,25 +228,49 @@ async def broadcast_eeg_data(data):
 
 async def send_to_microservice(features):
     """Send extracted features to brain-engine via Redis"""
+    global r
+    
+    if r is None:
+        print("⚠ Redis not connected, cannot send features")
+        return
+    
     try:
         frame_data = {
             'timestamp': time.time(),
             'features': features
         }
         r.set("current_frame", json.dumps(frame_data))
+        # Log first few sends and then every 10th
+        if not hasattr(send_to_microservice, 'send_count'):
+            send_to_microservice.send_count = 0
+        send_to_microservice.send_count += 1
+        if send_to_microservice.send_count <= 3 or send_to_microservice.send_count % 10 == 0:
+            print(f"✓ Sent frame #{send_to_microservice.send_count} to Redis ({len(features)} features)")
+    except redis.ConnectionError as e:
+        print(f"✗ Redis connection error: {e}")
+    except redis.TimeoutError as e:
+        print(f"✗ Redis timeout error: {e}")
     except Exception as e:
-        print(f"Error sending to Redis: {e}")
+        print(f"✗ Error sending to Redis: {type(e).__name__}: {e}")
 
 
 async def eeg_generation_loop():
     """Main loop that generates EEG data continuously"""
-    global simulator
+    global simulator, r
     buffer = np.zeros((BUFFER_SIZE, NUM_CHANNELS))
     buffer_index = 0
+    frame_count = 0
+    
+    print("EEG generation loop started")
     
     while True:
         if simulator is None:
             await asyncio.sleep(0.1)
+            continue
+        
+        if r is None:
+            print("⚠ Waiting for Redis connection...")
+            await asyncio.sleep(1.0)
             continue
             
         # Generate one sample for all channels
@@ -222,14 +281,30 @@ async def eeg_generation_loop():
         
         # When buffer is full (1 second of data), process it
         if buffer_index >= BUFFER_SIZE:
-            # Broadcast raw data to frontend
-            await broadcast_eeg_data(buffer)
+            frame_count += 1
             
-            # Extract features from the buffer
-            features = simulator.extract_features(buffer)
-            
-            # Send features to microservice via Redis
-            await send_to_microservice(features)
+            try:
+                # Broadcast raw data to frontend
+                await broadcast_eeg_data(buffer)
+                
+                # Extract features from the buffer
+                features = simulator.extract_features(buffer)
+                
+                if len(features) != 70:
+                    print(f"⚠ Warning: Expected 70 features, got {len(features)}")
+                
+                # Send features to microservice via Redis
+                await send_to_microservice(features)
+                
+                if frame_count == 1:
+                    print(f"✓ First frame processed and sent to Redis")
+                elif frame_count % 10 == 0:  # Log every 10 frames
+                    print(f"Processed {frame_count} frames so far...")
+                
+            except Exception as e:
+                print(f"✗ Error processing frame #{frame_count}: {type(e).__name__}: {e}")
+                import traceback
+                traceback.print_exc()
             
             # Reset buffer
             buffer_index = 0
@@ -269,6 +344,47 @@ async def root():
 @app.get("/health")
 async def health():
     return {"status": "healthy", "connections": len(active_connections)}
+
+
+@app.get("/status")
+async def status():
+    """Get detailed status of the simulator"""
+    global r
+    
+    # Check Redis connection
+    redis_status = "disconnected"
+    if r is not None:
+        try:
+            r.ping()
+            redis_status = "connected"
+        except:
+            redis_status = "disconnected"
+    
+    # Check if simulator is initialized
+    simulator_status = "initialized" if simulator is not None else "not initialized"
+    
+    # Get latest frame info from Redis
+    latest_frame_info = None
+    try:
+        frame_data = r.get("current_frame")
+        if frame_data:
+            data = json.loads(frame_data)
+            latest_frame_info = {
+                "timestamp": data.get("timestamp"),
+                "feature_count": len(data.get("features", []))
+            }
+    except:
+        pass
+    
+    return {
+        "status": "running",
+        "sample_rate": SAMPLE_RATE,
+        "channels": NUM_CHANNELS,
+        "simulator": simulator_status,
+        "redis": redis_status,
+        "websocket_connections": len(active_connections),
+        "latest_frame": latest_frame_info
+    }
 
 
 
