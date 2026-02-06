@@ -1,0 +1,28 @@
+version: "3.8"
+
+services:
+  # The Shared State Store
+  cache:
+    image: redis:alpine
+    restart: always
+    ports:
+      - "6379:6379"
+
+  # Service 2: The KNN Math Engine
+  brain-engine:
+    build: ./brain-engine
+    depends_on:
+      - cache
+    restart: always
+
+  # Service 3: The Gemini-Powered Chat API
+  chat-api:
+    build: ./chat-api
+    ports:
+      - "8000:8000"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY} # Pulls from your local .env file
+    depends_on:
+      - cache
+      - brain-engine
+    restart: always
