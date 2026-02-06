@@ -1,11 +1,20 @@
 import os
 import redis
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from google import genai
 from google.genai import types
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # 1. Setup Redis and Gemini Client
 r = redis.Redis(host='cache', port=6379, decode_responses=True)

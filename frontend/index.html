@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MindBridge — EEG & Chat</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="header">
+        <h1 class="logo">MindBridge</h1>
+        <nav class="nav">
+          <button type="button" class="nav-btn active" data-page="eeg">EEG</button>
+          <button type="button" class="nav-btn" data-page="chat">Chat</button>
+        </nav>
+      </header>
+      <main class="main">
+        <section id="page-eeg" class="page active">
+          <div class="eeg-toolbar">
+            <div class="eeg-status" id="eeg-status">Disconnected</div>
+            <button type="button" class="btn btn-primary" id="eeg-connect">Connect</button>
+            <button type="button" class="btn btn-secondary" id="eeg-disconnect" disabled>Disconnect</button>
+            <label class="channel-label">
+              Channel
+              <select id="eeg-channel" class="channel-select">
+                <!-- filled by JS -->
+              </select>
+            </label>
+          </div>
+          <div class="eeg-chart-wrap">
+            <canvas id="eeg-chart"></canvas>
+          </div>
+        </section>
+        <section id="page-chat" class="page">
+          <div class="chat-panel">
+            <div class="chat-messages" id="chat-messages"></div>
+            <div class="chat-input-wrap">
+              <textarea id="chat-input" class="chat-input" placeholder="Type a message..." rows="2"></textarea>
+              <button type="button" class="btn btn-primary btn-send" id="chat-send">Send</button>
+            </div>
+            <div class="chat-workload" id="chat-workload"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
