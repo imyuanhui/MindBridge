@@ -3,48 +3,47 @@ import { Chart, registerables } from 'chart.js';
 Chart.register(...registerables);
 
 const WS_URL = 'ws://localhost:8001/ws/eeg';
-const MAX_POINTS = 512;
 const CHANNELS = 14;
 
 let ws = null;
 let chart = null;
-let buffer = [];
-let selectedChannel = 0;
+
+const COLORS = [
+  '#22c55e',
+  '#0ea5e9',
+  '#f97316',
+  '#e11d48',
+  '#a855f7',
+  '#14b8a6',
+  '#facc15',
+  '#6366f1',
+  '#2dd4bf',
+  '#f43f5e',
+  '#4ade80',
+  '#38bdf8',
+  '#fb923c',
+  '#c4b5fd',
+];
 
 const statusEl = document.getElementById('eeg-status');
 const connectBtn = document.getElementById('eeg-connect');
 const disconnectBtn = document.getElementById('eeg-disconnect');
-const channelSelect = document.getElementById('eeg-channel');
 const canvas = document.getElementById('eeg-chart');
-
-function fillChannelSelect() {
-  channelSelect.innerHTML = '';
-  for (let i = 0; i < CHANNELS; i++) {
-    const opt = document.createElement('option');
-    opt.value = i;
-    opt.textContent = `Ch ${i + 1}`;
-    channelSelect.appendChild(opt);
-  }
-}
 
 function createChart() {
   if (chart) chart.destroy();
   const ctx = canvas.getContext('2d');
   chart = new Chart(ctx, {
-    type: 'line',
+    type: 'bar',
     data: {
-      labels: [],
+      labels: Array.from({ length: CHANNELS }, (_, i) => `Ch ${i + 1}`),
       datasets: [
         {
-          label: `Channel ${selectedChannel + 1}`,
-          data: [],
-          borderColor: '#6ee7b7',
-          backgroundColor: 'rgba(110, 231, 183, 0.08)',
-          borderWidth: 1.5,
-          fill: true,
-          tension: 0,
-          pointRadius: 0,
-          pointHoverRadius: 2,
+          label: 'Amplitude',
+          data: Array.from({ length: CHANNELS }, () => 0),
+          backgroundColor: COLORS.slice(0, CHANNELS),
+          borderColor: COLORS.slice(0, CHANNELS),
+          borderWidth: 1,
         },
       ],
     },
@@ -58,40 +57,55 @@ function createChart() {
           grid: { color: 'rgba(42, 49, 66, 0.6)' },
           ticks: {
             color: '#8b92a8',
-            maxTicksLimit: 10,
-            callback(value) {
-              return Number(value) != null ? (Number(value) / 128).toFixed(1) + 's' : '';
-            },
           },
         },
         y: {
           display: true,
           grid: { color: 'rgba(42, 49, 66, 0.6)' },
           ticks: { color: '#8b92a8' },
+          title: {
+            display: true,
+            text: 'Amplitude (a.u.)',
+            color: '#8b92a8',
+          },
         },
       },
       plugins: {
-        legend: { display: false },
+        legend: {
+          display: false,
+        },
       },
     },
   });
 }
 
-function pushToBuffer(channelsData) {
-  const samples = channelsData[selectedChannel];
-  if (!samples || !Array.isArray(samples)) return;
-  const base = buffer.length;
-  samples.forEach((v, i) => {
-    buffer.push({ x: base + i, y: v });
-  });
-  if (buffer.length > MAX_POINTS) {
-    buffer = buffer.slice(-MAX_POINTS);
+function updateAmplitudes(channelsData) {
+  if (!Array.isArray(channelsData) || channelsData.length === 0 || !chart) return;
+
+  const amps = [];
+  const numChannels = Math.min(CHANNELS, channelsData.length);
+
+  for (let ch = 0; ch < numChannels; ch++) {
+    const samples = channelsData[ch];
+    if (!Array.isArray(samples) || samples.length === 0) {
+      amps.push(0);
+      continue;
+    }
+    // Root-mean-square amplitude per channel over the latest frame
+    let sumSq = 0;
+    for (let i = 0; i < samples.length; i++) {
+      const v = Number(samples[i]) || 0;
+      sumSq += v * v;
+    }
+    amps.push(Math.sqrt(sumSq / samples.length));
   }
-  if (chart?.data?.datasets?.[0]) {
-    chart.data.datasets[0].data = buffer;
-    chart.data.datasets[0].label = `Channel ${selectedChannel + 1}`;
-    chart.update('none');
+
+  while (amps.length < CHANNELS) {
+    amps.push(0);
   }
+
+  chart.data.datasets[0].data = amps;
+  chart.update('none');
 }
 
 function connect() {
@@ -112,7 +126,7 @@ function connect() {
     try {
       const msg = JSON.parse(event.data);
       if (msg.channels && Array.isArray(msg.channels)) {
-        pushToBuffer(msg.channels);
+        updateAmplitudes(msg.channels);
       }
     } catch (_) {}
   };
@@ -139,19 +153,7 @@ function disconnect() {
 }
 
 export function initEeg() {
-  fillChannelSelect();
   createChart();
-
-  channelSelect.addEventListener('change', () => {
-    selectedChannel = parseInt(channelSelect.value, 10);
-    buffer = [];
-    if (chart?.data?.datasets?.[0]) {
-      chart.data.datasets[0].data = [];
-      chart.data.datasets[0].label = `Channel ${selectedChannel + 1}`;
-      chart.update('none');
-    }
-  });
-
   connectBtn.addEventListener('click', connect);
   disconnectBtn.addEventListener('click', disconnect);
 }
