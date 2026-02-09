@@ -7,17 +7,23 @@ services:
     restart: always
     ports:
       - "6379:6379"
+    volumes:
+      - cache-data:/data
+    networks:
+      - app
 
   # Service 2: The KNN Math Engine
   brain-engine:
-    build: ./brain-engine
+    build: backend/brain-engine
     depends_on:
       - cache
     restart: always
+    networks:
+      - app
 
   # Service 3: The Gemini-Powered Chat API
   chat-api:
-    build: ./chat-api
+    build: backend/chat-api
     ports:
       - "8000:8000"
     environment:
@@ -26,12 +32,34 @@ services:
       - cache
       - brain-engine
     restart: always
+    networks:
+      - app
 
   # Service 4: EEG Simulator
   simulator:
-    build: ./simulator
+    build: backend/simulator
     ports:
       - "8001:8001"
     depends_on:
       - cache
     restart: always
+    networks:
+      - app
+
+  # Service 5: Frontend (Vite dev server)
+  frontend:
+    build: frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - chat-api
+      - simulator
+    restart: always
+    networks:
+      - app
+
+networks:
+  app:
+
+volumes:
+  cache-data:
