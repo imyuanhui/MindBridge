@@ -38,12 +38,17 @@ r = None
 
 
 class EEGSimulator:
-    """Generates realistic EEG signals for 14 channels at 128Hz"""
+    """Generates realistic EEG signals for 14 channels at 128Hz with time-varying cognitive state."""
     
     def __init__(self, sample_rate=128, num_channels=14):
         self.sample_rate = sample_rate
         self.num_channels = num_channels
         self.time = 0.0
+        
+        # Cognitive state: 0 = relaxed, 1 = high mental workload. Drifts over time so
+        # band-power mix (and thus KNN workload rating) fluctuates.
+        self.cognitive_state = 0.5
+        self._state_random_walk = 0.5  # for smooth random drift
         
         # Initialize channel-specific parameters for realistic variation
         self.channel_params = []
@@ -60,39 +65,52 @@ class EEGSimulator:
                 'noise_level': np.random.uniform(2, 8)
             })
     
+    def _update_cognitive_state(self, dt: float):
+        """Drift cognitive state so workload rating varies over time."""
+        # Slow deterministic oscillation (periods ~25s and ~40s) for smooth variation
+        t = self.time
+        deterministic = 0.5 + 0.35 * np.sin(2 * np.pi * 0.04 * t) + 0.2 * np.sin(2 * np.pi * 0.025 * t + 1.0)
+        # Small random walk so it doesn't repeat exactly
+        self._state_random_walk += np.random.uniform(-0.015, 0.015)
+        self._state_random_walk = np.clip(self._state_random_walk, 0.0, 1.0)
+        # Blend: mostly deterministic with some random drift
+        self.cognitive_state = 0.75 * deterministic + 0.25 * self._state_random_walk
+        self.cognitive_state = float(np.clip(self.cognitive_state, 0.0, 1.0))
+    
     def generate_sample(self):
-        """Generate one sample (all channels) at current time"""
+        """Generate one sample (all channels) at current time."""
         dt = 1.0 / self.sample_rate
+        self._update_cognitive_state(dt)
+        
+        s = self.cognitive_state  # 0 = relaxed, 1 = high workload
+        # Band gains that shift with cognitive state (affects PSD → workload rating)
+        # Relaxed: more Alpha/Delta. High load: more Beta/Gamma.
+        delta_gain = 0.7 - 0.35 * s
+        theta_gain = 0.35 + 0.15 * (1 - s)
+        alpha_gain = 1.1 - 0.55 * s
+        beta_gain = 0.15 + 0.85 * s
+        gamma_gain = 0.08 + 0.5 * s
+        
         samples = np.zeros(self.num_channels)
         
         for ch in range(self.num_channels):
             params = self.channel_params[ch]
             
-            # Generate multi-frequency signal (realistic EEG)
-            # Alpha wave (dominant)
-            alpha = params['amplitude'] * np.sin(2 * np.pi * params['base_freq'] * self.time + params['phase'])
+            # Multi-frequency components (gains vary with cognitive state)
+            delta = delta_gain * params['amplitude'] * np.sin(2 * np.pi * 2 * self.time + params['phase'] * 0.5)
+            theta = theta_gain * params['amplitude'] * np.sin(2 * np.pi * 6 * self.time + params['phase'] * 0.7)
+            alpha = alpha_gain * params['amplitude'] * np.sin(2 * np.pi * params['base_freq'] * self.time + params['phase'])
+            beta = beta_gain * params['amplitude'] * np.sin(2 * np.pi * 20 * self.time + params['phase'] * 1.3)
+            gamma = gamma_gain * params['amplitude'] * np.sin(2 * np.pi * 35 * self.time + params['phase'] * 2.0)
             
-            # Theta component
-            theta = 0.3 * params['amplitude'] * np.sin(2 * np.pi * 6 * self.time + params['phase'] * 0.7)
+            # Extra modulation so each channel isn't perfectly in sync
+            modulation = 1 + 0.12 * np.sin(2 * np.pi * 0.08 * self.time + ch * 0.4)
             
-            # Beta component
-            beta = 0.2 * params['amplitude'] * np.sin(2 * np.pi * 20 * self.time + params['phase'] * 1.3)
+            signal = (delta + theta + alpha + beta + gamma) * modulation
             
-            # Delta component (slow wave)
-            delta = 0.4 * params['amplitude'] * np.sin(2 * np.pi * 2 * self.time + params['phase'] * 0.5)
-            
-            # Gamma component (high frequency)
-            gamma = 0.1 * params['amplitude'] * np.sin(2 * np.pi * 35 * self.time + params['phase'] * 2.0)
-            
-            # Add some non-linear modulation for realism
-            modulation = 1 + 0.1 * np.sin(2 * np.pi * 0.1 * self.time)
-            
-            # Combine all components
-            signal = (alpha + theta + beta + delta + gamma) * modulation
-            
-            # Add realistic noise (Gaussian + occasional artifacts)
+            # Realistic noise + occasional artifacts
             noise = np.random.normal(0, params['noise_level'])
-            if np.random.random() < 0.01:  # 1% chance of artifact
+            if np.random.random() < 0.01:
                 noise += np.random.normal(0, 20) * np.exp(-abs(np.random.normal(0, 0.1)))
             
             samples[ch] = signal + noise
