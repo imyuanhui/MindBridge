@@ -4,13 +4,22 @@ const messagesEl = document.getElementById('chat-messages');
 const inputEl = document.getElementById('chat-input');
 const sendBtn = document.getElementById('chat-send');
 const workloadEl = document.getElementById('chat-workload');
+const workloadInputEl = document.getElementById('chat-workload-input');
 
-function appendMessage(role, text, workload) {
+function appendMessage(role, text, workload, source) {
   const div = document.createElement('div');
   div.className = `chat-msg ${role}`;
   let html = text;
   if (role === 'assistant' && workload != null) {
-    html += `<div class="workload">Workload: ${workload.toFixed(1)}</div>`;
+    const sourceLabel =
+      source === 'user'
+        ? ' (user override)'
+        : source === 'engine'
+        ? ' (brain engine)'
+        : '';
+    html += `<div class="workload">Workload: ${workload.toFixed(
+      1,
+    )}${sourceLabel}</div>`;
   }
   div.innerHTML = html;
   messagesEl.appendChild(div);
@@ -31,11 +40,21 @@ async function sendMessage() {
   sendBtn.disabled = true;
   setWorkloadText('Thinking…');
 
+  const body = { user_message: text };
+  const rawOverride = workloadInputEl?.value.trim();
+  if (rawOverride) {
+    const w = Number(rawOverride);
+    if (!Number.isNaN(w)) {
+      // Clamp to [1, 9] on the client as well
+      body.user_workload = Math.max(1, Math.min(9, w));
+    }
+  }
+
   try {
     const res = await fetch(CHAT_API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_message: text }),
+      body: JSON.stringify(body),
     });
     const data = await res.json();
 
@@ -46,11 +65,26 @@ async function sendMessage() {
     }
 
     const workload = data.workload_detected ?? null;
+    const source = data.workload_source ?? null;
     const aiText = data.ai_response ?? 'No response.';
-    appendMessage('assistant', aiText, workload);
-    setWorkloadText(workload != null ? `Last response workload: ${workload.toFixed(1)}` : '');
+    appendMessage('assistant', aiText, workload, source);
+    if (workload != null) {
+      const label =
+        source === 'user'
+          ? 'User override workload'
+          : source === 'engine'
+          ? 'Engine workload'
+          : 'Workload';
+      setWorkloadText(`${label}: ${workload.toFixed(1)}`);
+    } else {
+      setWorkloadText('');
+    }
   } catch (err) {
-    appendMessage('assistant', `Error: ${err.message}. Is the chat API running on port 8000?`, null);
+    appendMessage(
+      'assistant',
+      `Error: ${err.message}. Is the chat API running on port 8000?`,
+      null,
+    );
     setWorkloadText('');
   } finally {
     sendBtn.disabled = false;

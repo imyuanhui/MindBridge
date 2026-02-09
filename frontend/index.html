@@ -31,6 +31,20 @@
         </section>
         <section id="page-chat" class="page">
           <div class="chat-panel">
+            <div class="chat-workload-control">
+              <label class="chat-workload-label" for="chat-workload-input">
+                Workload override (1–9, optional)
+              </label>
+              <input
+                id="chat-workload-input"
+                class="chat-workload-input"
+                type="number"
+                min="1"
+                max="9"
+                step="0.5"
+                placeholder="Auto"
+              />
+            </div>
             <div class="chat-messages" id="chat-messages"></div>
             <div class="chat-input-wrap">
               <textarea id="chat-input" class="chat-input" placeholder="Type a message..." rows="2"></textarea>

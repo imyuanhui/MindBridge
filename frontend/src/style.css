@@ -199,6 +199,36 @@ body {
   overflow: hidden;
 }
 
+.chat-workload-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: rgba(15, 23, 42, 0.9);
+}
+
+.chat-workload-label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.chat-workload-input {
+  width: 96px;
+  padding: 0.35rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
+.chat-workload-input::placeholder {
+  color: var(--text-muted);
+}
+
 .chat-messages {
   flex: 1;
   overflow-y: auto;
