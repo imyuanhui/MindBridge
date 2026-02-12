@@ -3,3 +3,4 @@ uvicorn
 redis
 google-genai
 pydantic
+dotenv

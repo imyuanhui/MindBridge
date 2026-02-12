@@ -5,3 +5,4 @@ redis
 numpy
 scipy
 pydantic
+dotenv
