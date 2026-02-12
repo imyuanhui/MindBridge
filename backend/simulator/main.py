@@ -10,6 +10,9 @@ from scipy import signal
 import time
 from typing import List
 import uvicorn
+import dotenv
+
+dotenv.load_dotenv()
 
 # EEG Simulation Parameters
 SAMPLE_RATE = 128  # Hz
@@ -35,7 +38,6 @@ active_connections: List[WebSocket] = []
 # Redis connection for microservice communication
 # Will be initialized in lifespan
 r = None
-
 
 class EEGSimulator:
     """Generates realistic EEG signals for 14 channels at 128Hz with time-varying cognitive state."""
@@ -163,15 +165,14 @@ async def lifespan(app: FastAPI):
     print("Starting EEG Simulator...")
     
     # Initialize Redis connection
-    redis_host = os.getenv('REDIS_HOST', 'cache')
-    redis_port = int(os.getenv('REDIS_PORT', '6379'))
-    print(f"Connecting to Redis at {redis_host}:{redis_port}...")
+    REDIS_URL = os.getenv('UPSTASH_REDIS_REST_URL')
+    print("Connecting to Redis...")
     
     max_retries = 5
     retry_delay = 2
     for attempt in range(max_retries):
         try:
-            r = redis.Redis(host=redis_host, port=redis_port, decode_responses=True, socket_connect_timeout=5)
+            r = redis.Redis.from_url(REDIS_URL)
             r.ping()  # Test connection
             print(f"✓ Redis connection successful")
             break

@@ -4,10 +4,15 @@ import numpy as np
 import pandas as pd
 from sklearn.neighbors import NearestNeighbors
 import time
+import os
+
+dotenv.load_dotenv()
+
+REDIS_URL = os.getenv('UPSTASH_REDIS_REST_URL')
 
 # 1. Setup Redis Connection
 # In Docker, 'cache' will be the hostname of the Redis container
-r = redis.Redis(host='cache', port=6379, decode_responses=True)
+r = redis.Redis.from_url(REDIS_URL)
 
 # 2. Load the Reference Library (Your 45-person dataset)
 df = pd.read_csv('brain_features_cleaned.csv')

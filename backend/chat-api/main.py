@@ -1,12 +1,16 @@
 import os
 from typing import Optional
-
 import redis
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from google import genai
 from google.genai import types
+import dotenv
+
+dotenv.load_dotenv()
+
+REDIS_URL = os.getenv('UPSTASH_REDIS_REST_URL')
 
 app = FastAPI()
 
@@ -19,7 +23,7 @@ app.add_middleware(
 )
 
 # 1. Setup Redis and Gemini Client
-r = redis.Redis(host='cache', port=6379, decode_responses=True)
+r = redis.Redis.from_url(REDIS_URL)
 
 # The client will automatically look for GEMINI_API_KEY in your environment variables
 client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
