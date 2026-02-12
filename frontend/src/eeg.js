@@ -2,7 +2,7 @@ import { Chart, registerables } from 'chart.js';
 
 Chart.register(...registerables);
 
-const WS_URL = 'ws://localhost:8001/ws/eeg';
+const WS_URL = 'https://mindbridge-simulator.onrender.com/ws/eeg';
 const CHANNELS = 14;
 
 let ws = null;
