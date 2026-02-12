@@ -1,112 +1,61 @@
-## MindBridge
+## MindBridge (Production)
 
 Neuro-aware demo stack that streams **simulated EEG data**, runs a **KNN-based brain engine**, and exposes a **Gemini-powered chat API** with workload awareness, all wrapped in a small web UI.
 
-This repo contains:
-- **frontend**: Vite app for EEG visualization and chat
-- **backend/brain-engine**: KNN “workload” estimator consuming EEG features from Redis
-- **backend/chat-api**: HTTP API that talks to Gemini and annotates replies with workload
-- **backend/simulator**: Real-time EEG signal simulator pushing data to WebSocket and Redis
-- **cache**: Redis instance shared by simulator and brain-engine
+🚀 View the [Live Demo](https://mindbridge.xuyuanhui.org/)
 
 ---
 
-## Prerequisites
+## Production Architecture
 
-- **Docker** and **Docker Compose** installed (`docker compose` CLI works)
-- A **Google Gemini API key**
+The production version of MindBridge utilizes a robust microservice architecture deployed across specialised cloud providers for optimal performance and scalability:
 
----
+- Frontend: A React/Vite application deployed on Vercel for global edge delivery.
 
-## 1. Configure your environment
+- Microservices (Render): The following services are deployed independently on Render:
 
-In the repo root, create a `.env` file (or edit the existing one) with your Gemini key:
+  - Simulator: Generates synthetic EEG signals and feature sets.
 
-```bash
-GEMINI_API_KEY=your-real-api-key-here
-```
+  - Chat-API: Manages the Gemini integration and workload-aware prompt logic.
 
-Docker Compose will inject `GEMINI_API_KEY` into the `chat-api` service.
+  - Brain-Engine: Processes feature frames to predict cognitive load.
 
----
-
-## 2. Start all services with Docker
-
-From the repo root (`MindBridge`):
-
-```bash
-docker compose up --build
-```
-
-This will start:
-- **cache** (Redis) on port **6379**
-- **brain-engine** (no public port; internal service)
-- **chat-api** on `http://localhost:8000`
-- **simulator** on `http://localhost:8001`
-- **frontend** on `http://localhost:5173`
-
-When all containers are healthy, open the UI:
-
-```text
-http://localhost:5173
-```
-
-You can stop everything with:
-
-```bash
-docker compose down
-```
+- Global Cache: An Upstash Redis instance connects the simulator to the brain engine.
 
 ---
 
-## 3. Exploring the features
+## Key Production Notes
+### 1. Real-Time Data Streaming
+Due to the command-per-second limitations of the Upstash Redis free tier, the production version does not reflect real-time EEG data at the same high frequency as the local Docker version. The data visualized is processed in throttled batches to maintain service stability.
 
-### EEG page
-
-- Go to the **EEG** tab in the top navigation.
-- Click **Connect** to open a WebSocket to the simulator at:
-  - `ws://localhost:8001/ws/eeg`
-- You should see a live EEG trace streaming from the simulator at 128 Hz across 14 channels.
-- Click **Disconnect** to stop streaming.
-
-Under the hood:
-- The **simulator** generates synthetic EEG, streams raw samples over WebSocket to the frontend, and writes extracted features into Redis.
-- The **brain-engine** reads features from Redis and predicts a workload score.
-
-### Chat page
-
-- Switch to the **Chat** tab.
-- Type a message in the input box and press **Send** (or press Enter).
-- The frontend posts to:
-  - `POST http://localhost:8000/chat`
-- The assistant’s reply will include:
-  - A **workload score** (1–9)
-  - A label for the source (e.g. “brain engine” or “user override”)
-
-**Workload override:**
-
-- In the **Workload override (1–9, optional)** field, you can manually set a workload value.
-- If provided, the value is sent as `user_workload` and is clamped to \[1, 9\] on the client.
-  - Low wordload: 1-6.5
-  - Medium workload: 6.5-8.5
-  - High workload: >= 8.5
-- The UI clearly marks responses that used the override vs the engine’s estimate.
+### 2. Cognitive Load Comparison
+This demo is optimized for comparing responses under different predefined cognitive loads. By using the "Workload Override" feature, you can see how the Gemini-powered assistant adjusts its tone, brevity, and complexity when it detects low, medium, or high workload scores.
 
 ---
 
-## 4. Service overview
+## Features & Usage
 
-- **cache**: Redis store for EEG feature frames (`cache-data` named volume).
-- **brain-engine**:
-  - Reads feature frames from Redis.
-  - Predicts workload and serves it to the chat API.
-- **chat-api**:
-  - Accepts `user_message` (+ optional `user_workload`) on `/chat`.
-  - Calls Gemini using `GEMINI_API_KEY`.
-  - Returns `ai_response`, `workload_detected`, and `workload_source`.
-- **simulator**:
-  - Serves WebSocket EEG stream on `/ws/eeg`.
-  - Exposes health endpoint on `/health`.
-- **frontend**:
-  - Single-page app with **EEG** and **Chat** views.
+### EEG Visualisation
+- Navigate to the *EEG* tab and click *Connect*.
+- View a simulated 128 Hz EEG trace across 14 channels.
+- Note: In production, this serves as a visual representation of the data being fed into the brain engine.
 
+### Workload-Aware Chat
+- Navigate to the Chat tab.
+- Manual Override (Recommended for Testing): Use the 1–9 scale to simulate different mental states:
+  - Low (1–6.5): Detailed, explanatory responses.
+  - Medium (6.5–8.5): Balanced, concise feedback.
+  - High (≥ 8.5): Brief, action-oriented, and low-cognitive-overhead replies.
+
+---
+
+## Local Development
+
+If you want to experience the local version with full real-time streaming capabilities, please switch to the main branch and follow the setup instructions provided there.
+
+The local version allows you to:
+
+- Stream real-time EEG data at 128 Hz without Upstash limitations.
+- Run the full stack via Docker Compose.
+
+- Connect directly to a local Redis instance for zero-latency feature processing.
