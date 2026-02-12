@@ -195,7 +195,7 @@ async def lifespan(app: FastAPI):
     simulator = EEGSimulator(SAMPLE_RATE, NUM_CHANNELS)
     print(f"Sample Rate: {SAMPLE_RATE} Hz")
     print(f"Channels: {NUM_CHANNELS}")
-    print("WebSocket endpoint: ws://localhost:8001/ws/eeg")
+    print("WebSocket endpoint: https://mindbridge-simulator.onrender.com/eeg")
     
     # Start the EEG generation loop
     generation_task = asyncio.create_task(eeg_generation_loop())
