@@ -1,4 +1,4 @@
-const CHAT_API = 'http://localhost:8000/chat';
+const CHAT_API = import.meta.env.VITE_API_BASE_URL;
 
 const messagesEl = document.getElementById('chat-messages');
 const inputEl = document.getElementById('chat-input');
