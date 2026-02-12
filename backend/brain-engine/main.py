@@ -20,6 +20,11 @@ REDIS_URL = os.getenv("UPSTASH_REDIS_REST_URL") or os.getenv("REDIS_URL")
 if not REDIS_URL:
     raise RuntimeError("REDIS_URL / UPSTASH_REDIS_REST_URL must be set for brain-engine.")
 
+# How often to poll Redis for new frames (in seconds).
+# Higher values mean fewer Redis GET/SET operations (good for free tiers),
+# but slower updates of the workload score.
+ENGINE_POLL_INTERVAL_SECONDS = float(os.getenv("ENGINE_POLL_INTERVAL_SECONDS", "10.0"))
+
 # 1. Setup Redis Connection
 r = redis.Redis.from_url(REDIS_URL, decode_responses=True)
 
@@ -105,8 +110,8 @@ async def engine_loop():
                 # Only print once to avoid spam
                 pass
 
-        # Poll every second to stay synced with the simulator
-        await asyncio.sleep(1.0)
+        # Poll at a configurable interval to stay synced with the simulator
+        await asyncio.sleep(ENGINE_POLL_INTERVAL_SECONDS)
 
 
 app = FastAPI()

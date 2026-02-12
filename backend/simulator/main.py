@@ -19,6 +19,11 @@ SAMPLE_RATE = 128  # Hz
 NUM_CHANNELS = 14
 BUFFER_SIZE = 128  # 1 second of data at 128Hz
 
+# How often to send frames to Redis for brain-engine (in frames).
+# Each frame is 1 second of data (BUFFER_SIZE samples at 128 Hz).
+# Default: every 10 seconds → significantly fewer Redis writes for free tiers.
+REDIS_SEND_EVERY_N_FRAMES = int(os.getenv("SIMULATOR_REDIS_EVERY_N_FRAMES", "10"))
+
 # Frequency bands (Hz)
 FREQ_BANDS = {
     'Delta': (0.5, 4),
@@ -308,12 +313,13 @@ async def eeg_generation_loop():
                 
                 # Extract features from the buffer
                 features = simulator.extract_features(buffer)
-                
+
                 if len(features) != 70:
                     print(f"⚠ Warning: Expected 70 features, got {len(features)}")
-                
-                # Send features to microservice via Redis
-                await send_to_microservice(features)
+
+                # Send features to microservice via Redis only every N frames
+                if REDIS_SEND_EVERY_N_FRAMES > 0 and frame_count % REDIS_SEND_EVERY_N_FRAMES == 0:
+                    await send_to_microservice(features)
                 
                 if frame_count == 1:
                     print(f"✓ First frame processed and sent to Redis")
